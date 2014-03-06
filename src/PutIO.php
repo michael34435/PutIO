@@ -201,13 +201,26 @@ class PutIO
      */
     public function upload($file = null, $filename = null, $parent_id = 0, $print_out = false)
     {
-        if (realpath($file)) {
-            $file = file_get_contents($file);
+        if (is_file($file) || substr($file, 0, 4) == "http") {
+            
+            if (substr($file, 0, 4) == "http") {
+                $tmp = $file;
+                $file = tempnam("/tmp", "put.io-");
+                $fn = fopen($file, "w+");
+                $part = parse_url($tmp);
+                if ($part["scheme"] == "http") {
+                    $data_post = file_get_contents($tmp);
+                } else {
+                    $data_post = $this->request($tmp);
+                }
+                fwrite($fn, $data_post);
+                fclose($fn);
+            }
         } else {
-            $file = $file;
+            exit("Warning: error occured! Undefined file type!" . PHP_EOL);
         }
-
-        $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => $file, "filename" => $filename, "parent_id" => $parent_id), "POST");
+        $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => "@" . realpath($file), "filename" => $filename, "parent_id" => $parent_id), "POST");
+        
         if ($print_out) {
             var_dump($data);
         } else {
@@ -272,7 +285,7 @@ class PutIO
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method); 
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
-        
+
         $result = curl_exec($ch);
         
         curl_close($ch);
