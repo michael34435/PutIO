@@ -5,7 +5,7 @@ class PutIO
     
     private $oauth = null;
     private $url = "https://put.io/v2";
-    private $cli = false;
+    private $cli = null;
 
     /**
      * 建構子
