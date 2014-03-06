@@ -6,6 +6,7 @@ class PutIO
     private $oauth = null;
     private $url = "https://put.io/v2";
     private $cli = null;
+    private $multi = null;
 
     /**
      * 建構子
@@ -42,11 +43,14 @@ class PutIO
      * @param  int $item_id 檔案ID
      * @param  boolean $to_local 存到本地端位置
      * @param  string $local 本地端
-     * @return object          實際檔案位置
+     * @param  boolean $multi 多線程
+     * @param  boolean $detail 印出詳細資訊
+     * @param  int $thread 線程數
+     * @return object   
      */
-    public function download($item_id = 0, $to_local = false, $local = "")
+    public function download($item_id = 0, $to_local = false, $local = "", $multi = false, $detail = false, $thread = 5)
     {           
-        $this->from_redirect_uri("$this->url/files/$item_id/download?oauth_token=$this->oauth", $to_local, $local);
+        $this->from_redirect_uri("$this->url/files/$item_id/download?oauth_token=$this->oauth", $to_local, $local, $multi, $detail = false, $thread);
     }
 
     /**
@@ -164,13 +168,17 @@ class PutIO
 
     /**
      * 壓縮並下載
-     * @param  string  $file_ids  檔案ID，可以用","分開
-     * @param  boolean $print_out 印出
+     * @param  int $file_ids 檔案ID
+     * @param  boolean $to_local 存到本地端位置
+     * @param  string $local 本地端
+     * @param  boolean $multi 多線程
+     * @param  boolean $detail 印出詳細資訊
+     * @param  int $thread 線程數
      * @return object             
      */
-    public function zip_and_download($file_ids = "", $to_local = false, $local = "")
+    public function zip_and_download($file_ids = "", $to_local = false, $local = "", $multi = false, $detail = false, $thread = 5)
     {
-        $this->from_redirect_uri("$this->url/files/zip?file_ids=$file_ids&oauth_token=$this->oauth", $to_local, $local);
+        $this->from_redirect_uri("$this->url/files/zip?file_ids=$file_ids&oauth_token=$this->oauth", $to_local, $local, $multi, $detail, $thread);
     }
 
 
@@ -244,11 +252,11 @@ class PutIO
         }
     }
 
-    private function from_redirect_uri($request_uri, $to_local = false, $local = "")
+    private function from_redirect_uri($request_uri, $to_local = false, $local = "", $multi = false, $detail = false, $thread = 5)
     {
         if ($to_local) {
             if (empty($local)) {
-                $local = getcwd();
+                $local = getcwd() . "/" . basename($request_uri);
             }
 
             $data = $this->request($request_uri);
@@ -257,7 +265,41 @@ class PutIO
                 $dom->loadHTML($data);
                 $link = $dom->getElementsByTagName("a")->item(0);
                 $fn = fopen($local, "w+");
-                $this->request($link->nodeValue, null, null, true, $fn); 
+                if (!$multi) {
+                    $this->request($link->nodeValue, null, null, true, $fn); 
+                } else {
+                    $tmpfiles = array();
+                    $size = $this->getSize($link->nodeValue);
+                    $splits = range(0, $size, round($size / $thread));
+                    $this->multi = curl_multi_init();
+                    $parts = array();
+                    for ($i = 0; $i < sizeof($splits); $i ++) {
+                        $parts[$i] = tmpfile();
+                        $x = ($i == 0 ? 0 : $splits[$i]+1);
+                        $y = ($i == sizeof($splits)-1 ? $size : $splits[$i+1]);
+                        $range = $x . "-" . $y;
+                        $this->request($link->nodeValue, null, null, true, $parts[$i], $range, $detail); 
+                        echo "Range from: " . $range . PHP_EOL;
+                    }
+
+                    $active = null;
+                    do {
+                        $status = curl_multi_exec($this->multi, $active);
+                    } while ($status === CURLM_CALL_MULTI_PERFORM || $active);
+
+                    curl_multi_close($this->multi);
+
+                    foreach ($parts as $key => $value) {
+                        fseek($value, 0, SEEK_SET);
+                        $c = fread($value, $size);
+                        fwrite($fn, $c);
+                        fclose($value);
+                    }
+
+                    unset($this->multi, $parts);
+                    $this->multi = null;
+                }
+                fclose($fn);
             } else {
                 var_dump($data);
             }
@@ -266,7 +308,7 @@ class PutIO
         }
     }
 
-    private function request($url, $data = null, $method = null, $files = false, $fn = null)
+    private function request($url, $data = null, $method = null, $files = false, $fn = null, $range = null, $detail= false)
     {
 
 
@@ -292,10 +334,27 @@ class PutIO
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
 
+        
+
         if ($files) {
-            curl_setopt($ch, CURLOPT_FILE, $fn);
-            curl_exec($ch);
-            curl_close($ch);
+            if (isset($range)) {
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); 
+                curl_setopt($ch, CURLOPT_HEADER, false);
+                if ($detail)
+                    curl_setopt($ch, CURLOPT_VERBOSE, true);
+                curl_setopt($ch, CURLOPT_FRESH_CONNECT, false);
+                curl_setopt($ch, CURLOPT_FILE, $fn);
+                curl_setopt($ch, CURLOPT_RANGE, $range);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
+                curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.29 Safari/535.1");
+                curl_multi_add_handle($this->multi, $ch);
+            } else {
+                curl_setopt($ch, CURLOPT_FILE, $fn);
+                curl_exec($ch);
+                curl_close($ch);
+            }
         } else {
             $result = curl_exec($ch);
             curl_close($ch);
@@ -306,6 +365,28 @@ class PutIO
     private function isJson($string) {
         json_decode($string);
         return (json_last_error() == JSON_ERROR_NONE);
+    }
+
+    private function getSize($url) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        $h = fopen('header', "w+");
+        curl_setopt($ch, CURLOPT_WRITEHEADER, $h);  
+
+        $data = curl_exec($ch);
+        curl_close($ch);    
+
+        if (preg_match('/Content-Length: (\d+)/', $data, $matches)) {
+            return $contentLength = (int)$matches[1];
+        }
+        else 
+            return false;
     }
 }
 ?>
