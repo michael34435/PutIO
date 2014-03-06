@@ -13,7 +13,7 @@ class PutIO
      * @param boolean $cli CLI模式
      * @param string  $url api位置，若無設定則為預設的
      */
-    public function __construct($key = null, $cli = false, $url = null)
+    public function __construct($key = null, $cli = true, $url = null)
     {
         $this->setOAuth($key);
         $this->cli = $cli;
@@ -53,8 +53,9 @@ class PutIO
                 $dom->loadHTML($data);
                 $link = $dom->getElementsByTagName("a")->item(0);
                 file_put_contents($local, $this->request($link->nodeValue)); 
-            } 
-            
+            } elseif ($this->isJson($data)) {
+                var_dump($data);
+            }
         } else {
             header("Location: $request_uri");
         }
@@ -131,7 +132,7 @@ class PutIO
      */
     public function convert_mp4($id = null, $print_out = false)
     {
-        $data = $this->request("$this->url/files/$id/mp4?oauth_token=$this->oauth", null, "POST");
+        $data = $this->request("$this->url/files/$id/mp4?oauth_token=$this->oauth", array("id" => $id), "POST");
         if ($print_out) {
             var_dump($data);
         } else {
@@ -200,7 +201,13 @@ class PutIO
      */
     public function upload($file = null, $filename = null, $parent_id = 0, $print_out = false)
     {
-        $data = $this->request("$this->url/files/upload", array("file" => $file, "filename" => $filename, "parent_id" => $parent_id), "POST");
+        if (realpath($file)) {
+            $file = file_get_contents($file);
+        } else {
+            $file = $file;
+        }
+
+        $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => $file, "filename" => $filename, "parent_id" => $parent_id), "POST");
         if ($print_out) {
             var_dump($data);
         } else {
@@ -229,7 +236,7 @@ class PutIO
 
         if ($this->oauth == null) {
             echo "Failed!" . PHP_EOL;
-            exit("Warning: Do not find oauth key, leaving ...");         
+            exit("Warning: Do not find oauth key, leaving ..." . PHP_EOL);         
             
         } else {
 
@@ -269,7 +276,6 @@ class PutIO
         $result = curl_exec($ch);
         
         curl_close($ch);
-
 
         return $this->isJson($result) ? json_decode($result, true) : $result; 
     }   
