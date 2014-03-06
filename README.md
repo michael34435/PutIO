@@ -5,6 +5,8 @@ Put.io PHP SDK(unofficial)
 
 #Changelog
 
+-v0.03 fix memory leak issue
+
 -v0.02: fix upload function
 
 -v0.01: minor fix

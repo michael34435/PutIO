@@ -15,6 +15,7 @@ class PutIO
      */
     public function __construct($key = null, $cli = true, $url = null)
     {
+        ini_set("memory_limit", -1);
         $this->setOAuth($key);
         $this->cli = $cli;
         $this->url = $url ? $url : $this->url;
@@ -22,7 +23,7 @@ class PutIO
 
     /**
      * 列出所有檔案
-     * @param  integer $parent_id 資料夾id
+     * @param  int $parent_id 資料夾id
      * @param  boolean $print_out 印出
      * @return object             
      */
@@ -38,27 +39,14 @@ class PutIO
 
     /**
      * 下載
-     * @param  string $item_id 檔案ID
+     * @param  int $item_id 檔案ID
      * @param  boolean $to_local 存到本地端位置
      * @param  string $local 本地端
      * @return object          實際檔案位置
      */
-    public function download($item_id = null, $to_local = false, $local = "")
+    public function download($item_id = 0, $to_local = false, $local = "")
     {           
-        $request_uri = "$this->url/files/$item_id/download?oauth_token=$this->oauth";
-        if ($to_local) {
-            $data = $this->request($request_uri);
-            if (!is_array($data)) {
-                $dom = new DOMDocument;
-                $dom->loadHTML($data);
-                $link = $dom->getElementsByTagName("a")->item(0);
-                file_put_contents($local, $this->request($link->nodeValue)); 
-            } elseif ($this->isJson($data)) {
-                var_dump($data);
-            }
-        } else {
-            header("Location: $request_uri");
-        }
+        $this->from_redirect_uri("$this->url/files/$item_id/download?oauth_token=$this->oauth", $to_local, $local);
     }
 
     /**
@@ -67,7 +55,7 @@ class PutIO
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function delete($file_ids = null, $print_out = false)
+    public function delete($file_ids = "", $print_out = false)
     {
         $data = $this->request("$this->url/files/delete?oauth_token=$this->oauth", array("file_ids" => $file_ids), "POST");
         if ($print_out) {
@@ -84,7 +72,7 @@ class PutIO
      * @param  integer $parent_id 於哪個資料夾底下
      * @return object             
      */
-    public function create_folder($name = null, $parent_id = 0)
+    public function create_folder($name = "default", $parent_id = 0)
     {
         $this->request("$this->url/files/create-folder?oauth_token=$this->oauth", array("name" => $name, "parent_id" => $parent_id), "POST");
     }
@@ -96,7 +84,7 @@ class PutIO
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function move($file_ids = null, $parent_id = 0, $print_out = false)
+    public function move($file_ids = "", $parent_id = 0, $print_out = false)
     {
         $data = $this->request("$this->url/files/move?oauth_token=$this->oauth", array("file_ids" => $file_ids, "parent_id" => $parent_id), "POST");
         if ($print_out) {
@@ -109,12 +97,12 @@ class PutIO
 
     /**
      * 重新命名
-     * @param  string  $file_id   檔案ID
+     * @param  int  $file_id   檔案ID
      * @param  string  $name      檔案新名字
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function rename($file_id = null, $name = null, $print_out = false)
+    public function rename($file_id = 0, $name = null, $print_out = false)
     {
         $data = $this->request("$this->url/files/rename?oauth_token=$this->oauth", array("file_id" => $file_id, "name" => $name), "POST");
         if ($print_out) {
@@ -130,7 +118,7 @@ class PutIO
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function convert_mp4($id = null, $print_out = false)
+    public function convert_mp4($id = 0, $print_out = false)
     {
         $data = $this->request("$this->url/files/$id/mp4?oauth_token=$this->oauth", array("id" => $id), "POST");
         if ($print_out) {
@@ -146,7 +134,7 @@ class PutIO
      * @param  int $id 檔案ID
      * @return object     
      */
-    public function get_mp4($id = null)
+    public function get_mp4($id = 0)
     {
         $data = $this->request("$this->url/files/$id/mp4?oauth_token=$this->oauth");
         if ($print_out) {
@@ -180,14 +168,9 @@ class PutIO
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function zip_and_download($file_ids = null, $print_out = false)
+    public function zip_and_download($file_ids = "", $to_local = false, $local = "")
     {
-        $data = $this->request("$this->url/files/zip?file_ids=$file_ids&oauth_token=$this->oauth");
-        if ($print_out) {
-            var_dump($data);
-        } else {
-            return $data;
-        }
+        $this->from_redirect_uri("$this->url/files/zip?file_ids=$file_ids&oauth_token=$this->oauth", $to_local, $local);
     }
 
 
@@ -199,7 +182,7 @@ class PutIO
      * @param  boolean $print_out 印出
      * @return object             
      */
-    public function upload($file = null, $filename = null, $parent_id = 0, $print_out = false)
+    public function upload($file = "", $filename = null, $parent_id = 0, $print_out = false)
     {
         if (is_file($file) || substr($file, 0, 4) == "http") {
             
@@ -210,10 +193,10 @@ class PutIO
                 $part = parse_url($tmp);
                 if ($part["scheme"] == "http") {
                     $data_post = file_get_contents($tmp);
+                    fwrite($fn, $data_post);
                 } else {
-                    $data_post = $this->request($tmp);
+                    $data_post = $this->request($tmp, null, null, true, $fn);
                 }
-                fwrite($fn, $data_post);
                 fclose($fn);
             }
         } else {
@@ -261,7 +244,29 @@ class PutIO
         }
     }
 
-    private function request($url, $data = null, $method = null)
+    private function from_redirect_uri($request_uri, $to_local = false, $local = "")
+    {
+        if ($to_local) {
+            if (empty($local)) {
+                $local = getcwd();
+            }
+
+            $data = $this->request($request_uri);
+            if (!is_array($data)) {
+                $dom = new DOMDocument;
+                $dom->loadHTML($data);
+                $link = $dom->getElementsByTagName("a")->item(0);
+                $fn = fopen($local, "w+");
+                $this->request($link->nodeValue, null, null, true, $fn); 
+            } else {
+                var_dump($data);
+            }
+        } else {
+            header("Location: $request_uri");
+        }
+    }
+
+    private function request($url, $data = null, $method = null, $files = false, $fn = null)
     {
 
 
@@ -275,6 +280,7 @@ class PutIO
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+        curl_setopt($ch, CURLOPT_BUFFERSIZE, 4096);
         curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($download_size, $downloaded, $upload_size, $uploaded)
         {
             $progress = sprintf("%.2f", (($downloaded == 0 ? $uploaded : $downloaded) / ($download_size == 0 ? $upload_size + 1 : $download_size)) * 100);
@@ -286,11 +292,15 @@ class PutIO
             curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         }
 
-        $result = curl_exec($ch);
-        
-        curl_close($ch);
-
-        return $this->isJson($result) ? json_decode($result, true) : $result; 
+        if ($files) {
+            curl_setopt($ch, CURLOPT_FILE, $fn);
+            curl_exec($ch);
+            curl_close($ch);
+        } else {
+            $result = curl_exec($ch);
+            curl_close($ch);
+            return $this->isJson($result) ? json_decode($result, true) : $result; 
+        }
     }   
 
     private function isJson($string) {
