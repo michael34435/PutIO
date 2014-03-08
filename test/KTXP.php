@@ -1,6 +1,6 @@
 <?php
 
-include_once "PutIO.php";
+require_once "PutIO.php";
 
 class KTXP
 {
@@ -18,7 +18,7 @@ class KTXP
 
     public function __construct()
     {
-        $this->putio = new PutIO("");
+        $this->putio = new PutIO("NXSU4W30");
         $this->fn = fopen($this->filename, "a+");
         $this->get_status();
     }
@@ -70,9 +70,7 @@ class KTXP
                 if (!isset($this->data[$r])) {
                     $this->data[$r] = array();
                     $this->data[$r]["status"] = 0;
-                } else {
-                    continue;
-                } 
+                }
 
                 if (isset($this->data[$r]) && $this->data[$r]["status"] == 0) {
 
@@ -93,6 +91,7 @@ class KTXP
             }
 
             $this->renew();
+            unset($data, $dom, $tr, $obj);
         }
     }
 
