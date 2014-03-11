@@ -210,8 +210,12 @@ class PutIO
         } else {
             exit("Warning: error occured! Undefined file type!" . PHP_EOL);
         }
-        $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => "@" . realpath($file), "filename" => $filename, "parent_id" => $parent_id), "POST");
-        
+        if (!function_exists('curl_file_create')) {
+            $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => "@" . realpath($file), "filename" => $filename, "parent_id" => $parent_id), "POST");
+        } else {
+            $data = $this->request("$this->url/files/upload?oauth_token=$this->oauth", array("file" => curl_file_create(realpath($file), "application/x-bittorrent", $filename), "parent_id" => $parent_id), "POST");
+        }
+
         if ($print_out) {
             var_dump($data);
         } else {
@@ -282,10 +286,8 @@ class PutIO
                         echo "Range from: " . $range . PHP_EOL;
                     }
 
-                    $active = null;
-                    do {
-                        $status = curl_multi_exec($this->multi, $active);
-                    } while ($status === CURLM_CALL_MULTI_PERFORM || $active);
+                    
+                    $this->multi_retry();
 
                     curl_multi_close($this->multi);
 
@@ -297,6 +299,10 @@ class PutIO
                         unset($c);
                     }
 
+                    // foreach ($parts as $key => $value) {
+                    //     # code...
+                    // }
+
                     unset($this->multi, $parts);
                     $this->multi = null;
                 }
@@ -307,6 +313,23 @@ class PutIO
         } else {
             header("Location: $request_uri");
         }
+    }
+
+    private function multi_retry()
+    {
+        $active = null;
+        do {
+            $status = curl_multi_exec($this->multi, $active);
+            $info = curl_multi_info_read($this->multi);
+            if (false !== $info) {
+                if ($info["result"] != CURLE_OK) {
+                    echo PHP_EOL . "Retrying... " . PHP_EOL;
+                    curl_multi_remove_handle($this->multi, $info["handle"]);
+                    curl_multi_add_handle($this->multi, $info["handle"]);
+                    $this->multi_retry();
+                }
+            }
+        } while ($status === CURLM_CALL_MULTI_PERFORM || $active);
     }
 
     private function request($url, $data = null, $method = null, $files = false, $fn = null, $range = null, $detail= false)
@@ -322,13 +345,22 @@ class PutIO
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
         curl_setopt($ch, CURLOPT_NOPROGRESS, false);
-        curl_setopt($ch, CURLOPT_BUFFERSIZE, 4096);
-        curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($download_size, $downloaded, $upload_size, $uploaded)
-        {
-            $progress = sprintf("%.2f", (($downloaded == 0 ? $uploaded : $downloaded) / ($download_size == 0 ? $upload_size + 1 : $download_size)) * 100);
-            echo "\rRequest status: $progress%";
-        });
+        if (!function_exists('curl_file_create')) {
+            curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($download_size, $downloaded, $upload_size, $uploaded)
+            {
+                $progress = sprintf("%.2f", (($downloaded == 0 ? $uploaded : $downloaded) / ($download_size == 0 ? $upload_size + 1 : $download_size)) * 100);
+                echo "\rRequest status: $progress%";
+            });
+        } else {
+            curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($client, $download_size, $downloaded, $upload_size, $uploaded)
+            {
+                $progress = sprintf("%.2f", (($downloaded == 0 ? $uploaded : $downloaded) / ($download_size == 0 ? $upload_size + 1 : $download_size)) * 100);
+                echo "\rRequest status: $progress%";
+            });
+        }
+
 
         if (isset($method)) {
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method); 
@@ -339,12 +371,12 @@ class PutIO
 
         if ($files) {
             if (isset($range)) {
+                @ftruncate($fn, 0);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
                 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); 
                 curl_setopt($ch, CURLOPT_HEADER, false);
                 if ($detail)
                     curl_setopt($ch, CURLOPT_VERBOSE, true);
-                curl_setopt($ch, CURLOPT_FRESH_CONNECT, false);
                 curl_setopt($ch, CURLOPT_FILE, $fn);
                 curl_setopt($ch, CURLOPT_RANGE, $range);
                 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
@@ -352,6 +384,7 @@ class PutIO
                 curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.29 Safari/535.1");
                 curl_multi_add_handle($this->multi, $ch);
             } else {
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
                 curl_setopt($ch, CURLOPT_FILE, $fn);
                 curl_exec($ch);
                 curl_close($ch);

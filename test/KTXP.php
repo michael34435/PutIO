@@ -18,7 +18,7 @@ class KTXP
 
     public function __construct()
     {
-        $this->putio = new PutIO("NXSU4W30");
+        $this->putio = new PutIO("");
         $this->fn = fopen($this->filename, "a+");
         $this->get_status();
     }
@@ -59,11 +59,11 @@ class KTXP
             $tr = $dom->getElementsByTagName("tr");
             foreach ($tr as $key => $value) {
 
-                if (($publisher = $this->matchPublisher($value)) == null) {
+                if (($publisher = $this->match_publisher($value)) == null) {
                     continue;
                 }
 
-                if (($r = $this->matchTitle($value)) == null) {
+                if (($r = $this->match_title($value)) == null) {
                     continue;
                 }
 
@@ -79,14 +79,18 @@ class KTXP
                     if (isset($obj["status"]) && $obj["status"] == "OK") {
                         $this->data[$r]["name"] = $obj["transfer"]["name"];
                         $this->data[$r]["putio"] = 0;
+
+                        // handle downloading
+                        $this->data[$r]["status"] = 1;
                     } else {
                         $this->data[$r]["name"] = "undefined";
                         $this->data[$r]["putio"] = 0;
                         continue;
                     }
+                }
 
-                    // handle downloading
-                    $this->data[$r]["status"] = 1;
+                if (isset($this->data[$r]) && $this->data[$r]["status"] == 0) {
+                    unset($this->data[$r]);
                 }
             }
 
@@ -127,8 +131,8 @@ class KTXP
         $queues = implode(",", $tmp);
 
         if (!empty($queues)) {
-            $file = "D:\\" . time() . ".zip";
-            $this->putio->zip_and_download($queues, true, $file, true, true, 100);
+            $file = "I:\\" . time() . ".zip";
+            $this->putio->zip_and_download($queues, true, $file, true, true, 10);
             $this->putio->delete($queues);
             return $file;
         } else {
@@ -147,9 +151,9 @@ class KTXP
         return false;
     }
 
-    private function matchPublisher($node)
+    private function match_publisher($node)
     {
-        $last = $this->getLastNode($node, "td");
+        $last = $this->get_last_node($node, "td");
 
         $matchAry = $this->publisher;
 
@@ -161,21 +165,21 @@ class KTXP
         return null;
     }
 
-    private function getLastNode($node, $name, $last = 1)
+    private function get_last_node($node, $name, $last = 1)
     {
         $dom = new DOMDocument;
-        $nodes = $this->innerXML($node);
+        $nodes = $this->inner_xml($node);
         @$dom->loadHTML($nodes);
         $td = $dom->getElementsByTagName($name);
         $last = $td->item($td->length-$last);
         return $last;
     }
 
-    private function matchTitle($node)
+    private function match_title($node)
     {
         $matchAry = $this->title;
         $dom = new DOMDocument;
-        $nodes = $this->innerXML($node);
+        $nodes = $this->inner_xml($node);
         @$dom->loadHTML($nodes);
         $td = $dom->getElementsByTagName("td");
 
@@ -184,7 +188,7 @@ class KTXP
                 foreach ($matchAry as $key => $value1) {
                     if (preg_match("/" . $value1 . "/", $value->nodeValue)) {
                         $dom1 = new DOMDocument;
-                        $a_n = $this->innerXML($value);
+                        $a_n = $this->inner_xml($value);
                         @$dom1->loadHTML($a_n);
                         foreach ($dom1->getElementsByTagName("a") as $url) {
                             return $this->prefix . $url->getAttribute("href");
@@ -197,7 +201,7 @@ class KTXP
         return null;
     }
 
-    private function innerXML($node) 
+    private function inner_xml($node) 
     { 
         $doc  = $node->ownerDocument; 
         $frag = $doc->createDocumentFragment(); 

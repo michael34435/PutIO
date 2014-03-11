@@ -5,6 +5,8 @@ Put.io PHP SDK(unofficial)
 
 #Changelog
 
+-v0.05 support php5.5
+
 -v0.04 multi-thread download by curl
 
 -v0.03 fix memory leak issue
