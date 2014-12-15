@@ -278,7 +278,7 @@ class PutIO
                     $this->multi = curl_multi_init();
                     $parts = array();
                     for ($i = 0; $i < sizeof($splits); $i ++) {
-                        $parts[$i] = tmpfile();
+                        $parts[] = tmpfile();
                         $x = ($i == 0 ? 0 : $splits[$i]+1);
                         $y = ($i == sizeof($splits)-1 ? $size : $splits[$i+1]);
                         $range = $x . "-" . $y;
@@ -286,8 +286,8 @@ class PutIO
                         echo "Range from: " . $range . PHP_EOL;
                     }
 
-                    
-                    $this->multi_retry();
+                    $copy = array_reverse($parts);                    
+                    $this->multi_retry($copy);
 
                     curl_multi_close($this->multi);
 
@@ -298,10 +298,6 @@ class PutIO
                         fclose($value);
                         unset($c);
                     }
-
-                    // foreach ($parts as $key => $value) {
-                    //     # code...
-                    // }
 
                     unset($this->multi, $parts);
                     $this->multi = null;
@@ -315,10 +311,11 @@ class PutIO
         }
     }
 
-    private function multi_retry()
+    private function multi_retry($copy_target_ary = null)
     {
         $active = null;
         do {
+            $file_stream = array_pop($copy_target_ary);
             $status = curl_multi_exec($this->multi, $active);
             $info = curl_multi_info_read($this->multi);
             if (false !== $info) {
@@ -326,7 +323,11 @@ class PutIO
                     echo PHP_EOL . "Retrying... " . PHP_EOL;
                     curl_multi_remove_handle($this->multi, $info["handle"]);
                     curl_multi_add_handle($this->multi, $info["handle"]);
-                    $this->multi_retry();
+                    if ($file_stream != null) {
+                        fseek($file_stream, 0, SEEK_SET);
+                        fwrite($file_stream, "");
+                    }
+                    $this->multi_retry($copy_target_ary);
                 }
             }
         } while ($status === CURLM_CALL_MULTI_PERFORM || $active);
