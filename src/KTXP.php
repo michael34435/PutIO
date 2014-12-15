@@ -84,18 +84,14 @@ class KTXP
                     if (isset($obj["status"]) && $obj["status"] == "OK") {
                         $this->data[$r]["name"] = $obj["transfer"]["name"];
                         $this->data[$r]["putio"] = 0;
-
-                        // handle downloading
-                        $this->data[$r]["status"] = 1;
                     } else {
                         $this->data[$r]["name"] = "undefined";
                         $this->data[$r]["putio"] = 0;
                         continue;
                     }
-                }
 
-                if (isset($this->data[$r]) && $this->data[$r]["status"] == 0) {
-                    unset($this->data[$r]);
+                    // handle downloading
+                    $this->data[$r]["status"] = 1;
                 }
             }
 
