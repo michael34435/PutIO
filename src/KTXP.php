@@ -18,7 +18,7 @@ class KTXP
 
     public function __construct()
     {
-        $this->putio = new PutIO("2SLPI6WV");
+        $this->putio = new PutIO();
         $this->fn = fopen($this->filename, "a+");
         $this->get_status();
     }
