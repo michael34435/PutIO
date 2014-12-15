@@ -17,7 +17,7 @@ class PutIO
     public function __construct($key = null, $cli = true, $url = null)
     {
         ini_set("memory_limit", -1);
-        $this->setOAuth($key);
+        $this->set_OAuth($key);
         $this->cli = $cli;
         $this->url = $url ? $url : $this->url;
     }
@@ -193,7 +193,6 @@ class PutIO
     public function upload($file = "", $filename = null, $parent_id = 0, $print_out = false)
     {
         if (is_file($file) || substr($file, 0, 4) == "http") {
-            
             if (substr($file, 0, 4) == "http") {
                 $tmp = $file;
                 $file = tempnam("/tmp", "put.io-");
@@ -227,13 +226,13 @@ class PutIO
      * 設定OAuth
      * @param string $key oauth
      */
-    public function setOAuth($key)
+    public function set_OAuth($key)
     {
         $this->oauth = $key;
-        $this->checkOAuth();
+        $this->check_OAuth();
     }
 
-    private function checkOAuth()
+    private function check_OAuth()
     {
         for($i = 0; $i < 10; $i++) {
             echo ".";
@@ -270,24 +269,26 @@ class PutIO
                 $link = $dom->getElementsByTagName("a")->item(0);
                 $fn = fopen($local, "w+");
                 if (!$multi) {
-                    $this->request($link->nodeValue, null, null, true, $fn); 
+                    $this->request($link->getAttribute("href"), null, null, true, $fn); 
                 } else {
                     $tmpfiles = array();
-                    $size = $this->getSize($link->nodeValue);
+                    $size = $this->get_size($link->getAttribute("href"));
                     $splits = range(0, $size, round($size / $thread));
                     $this->multi = curl_multi_init();
                     $parts = array();
+                    $copy = array();
                     for ($i = 0; $i < sizeof($splits); $i ++) {
                         $parts[$i] = tmpfile();
                         $x = ($i == 0 ? 0 : $splits[$i]+1);
                         $y = ($i == sizeof($splits)-1 ? $size : $splits[$i+1]);
                         $range = $x . "-" . $y;
-                        $this->request($link->nodeValue, null, null, true, $parts[$i], $range, $detail); 
+                        $id = $this->request($link->getAttribute("href"), null, null, true, $parts[$i], $range, $detail); 
+                        $copy[$id] = &$parts[$i];
                         echo "Range from: " . $range . PHP_EOL;
                     }
 
                     
-                    $this->multi_retry();
+                    $this->multi_retry($copy);
 
                     curl_multi_close($this->multi);
 
@@ -299,14 +300,11 @@ class PutIO
                         unset($c);
                     }
 
-                    // foreach ($parts as $key => $value) {
-                    //     # code...
-                    // }
-
                     unset($this->multi, $parts);
                     $this->multi = null;
                 }
                 fclose($fn);
+                unset($dom, $fn);
             } else {
                 var_dump($data);
             }
@@ -315,7 +313,7 @@ class PutIO
         }
     }
 
-    private function multi_retry()
+    private function multi_retry($copy_file_stream)
     {
         $active = null;
         do {
@@ -323,10 +321,14 @@ class PutIO
             $info = curl_multi_info_read($this->multi);
             if (false !== $info) {
                 if ($info["result"] != CURLE_OK) {
+                    if (is_array($copy_file_stream) && isset($copy_file_stream[(int)$info["handle"]])) {
+                        @ftruncate($copy_file_stream[(int)$info["handle"]], 0);
+                        @fseek($copy_file_stream[(int)$info["handle"]], 0);
+                    }
                     echo PHP_EOL . "Retrying... " . PHP_EOL;
                     curl_multi_remove_handle($this->multi, $info["handle"]);
                     curl_multi_add_handle($this->multi, $info["handle"]);
-                    $this->multi_retry();
+                    $this->multi_retry($copy_file_stream);
                 }
             }
         } while ($status === CURLM_CALL_MULTI_PERFORM || $active);
@@ -334,8 +336,6 @@ class PutIO
 
     private function request($url, $data = null, $method = null, $files = false, $fn = null, $range = null, $detail= false)
     {
-
-
         // making request echo 
         if ($this->cli)
             echo PHP_EOL . "Making " . ($method ? $method : "GET") . " request... $url" . PHP_EOL;
@@ -345,8 +345,10 @@ class PutIO
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
+        curl_setopt($ch, CURLOPT_FORBID_REUSE, false);
+        curl_setopt($ch, CURLOPT_FRESH_CONNECT, false);
         curl_setopt($ch, CURLOPT_NOPROGRESS, false);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 360);
         if (!function_exists('curl_file_create')) {
             curl_setopt($ch, CURLOPT_PROGRESSFUNCTION, function($download_size, $downloaded, $upload_size, $uploaded)
             {
@@ -368,10 +370,10 @@ class PutIO
         }
 
         
-
         if ($files) {
             if (isset($range)) {
                 @ftruncate($fn, 0);
+                @fseek($fn, 0);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
                 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); 
                 curl_setopt($ch, CURLOPT_HEADER, false);
@@ -379,10 +381,11 @@ class PutIO
                     curl_setopt($ch, CURLOPT_VERBOSE, true);
                 curl_setopt($ch, CURLOPT_FILE, $fn);
                 curl_setopt($ch, CURLOPT_RANGE, $range);
-                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 360);
                 curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
                 curl_setopt($ch, CURLOPT_USERAGENT, "Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.29 Safari/535.1");
                 curl_multi_add_handle($this->multi, $ch);
+                return (int)$ch;
             } else {
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
                 curl_setopt($ch, CURLOPT_FILE, $fn);
@@ -392,16 +395,18 @@ class PutIO
         } else {
             $result = curl_exec($ch);
             curl_close($ch);
-            return $this->isJson($result) ? json_decode($result, true) : $result; 
+            return $this->is_json($result) ? json_decode($result, true) : $result; 
         }
     }   
 
-    private function isJson($string) {
+    private function is_json($string)
+    {
         json_decode($string);
         return (json_last_error() == JSON_ERROR_NONE);
     }
 
-    private function getSize($url) {
+    private function get_size($url)
+    {
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);

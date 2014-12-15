@@ -8,8 +8,8 @@ class KTXP
     private $url = "http://bt.ktxp.com/sort-1-%s.html";
     private $fn = null;
     private $data = array();
-    private $title = array(".*Kill.*BIG5.*");
-    private $publisher = array("极影");
+    private $title = array();
+    private $publisher = array();
     private $prefix = "http://bt.ktxp.com";
     private $filename = "ktxp.csv";
     private $meta = "<meta http-equiv='Content-Type' content='text/html; charset=utf-8'>";
@@ -18,7 +18,7 @@ class KTXP
 
     public function __construct()
     {
-        $this->putio = new PutIO("");
+        $this->putio = new PutIO("2SLPI6WV");
         $this->fn = fopen($this->filename, "a+");
         $this->get_status();
     }
@@ -47,6 +47,11 @@ class KTXP
         }
 
         $this->putio_files = $this->putio->list_file();
+    }
+
+    public function search_word($word)
+    {
+        $this->url = "http://bt.ktxp.com/search.php?keyword=" . urlencode($word) . "&page=%s";
     }
 
     public function parse($page = 1)
@@ -103,6 +108,9 @@ class KTXP
     {
         file_put_contents($this->filename, "");
         foreach ($this->data as $key => $value) {
+            if (empty($value["name"]) || $value["name"] == "undefined") {
+                continue;
+            }
             fputcsv($this->fn, array($key, $value["status"], $value["name"], $value["putio"]));
         }
     }
@@ -131,8 +139,8 @@ class KTXP
         $queues = implode(",", $tmp);
 
         if (!empty($queues)) {
-            $file = "I:\\" . time() . ".zip";
-            $this->putio->zip_and_download($queues, true, $file, true, true, 10);
+            $file = "F:\\" . time() . ".zip";
+            $this->putio->zip_and_download($queues, true, $file, true, true, 5);
             $this->putio->delete($queues);
             return $file;
         } else {
@@ -171,7 +179,7 @@ class KTXP
         $nodes = $this->inner_xml($node);
         @$dom->loadHTML($nodes);
         $td = $dom->getElementsByTagName($name);
-        $last = $td->item($td->length-$last);
+        $last = $td->item($td->length - $last);
         return $last;
     }
 
@@ -181,17 +189,37 @@ class KTXP
         $dom = new DOMDocument;
         $nodes = $this->inner_xml($node);
         @$dom->loadHTML($nodes);
-        $td = $dom->getElementsByTagName("td");
 
-        foreach ($td as $key => $value) {
+        foreach ($dom->getElementsByTagName("td") as $key => $value) {
             if ($value->getAttribute("class") == "ltext ttitle") {
                 foreach ($matchAry as $key => $value1) {
                     if (preg_match("/" . $value1 . "/", $value->nodeValue)) {
                         $dom1 = new DOMDocument;
                         $a_n = $this->inner_xml($value);
                         @$dom1->loadHTML($a_n);
-                        foreach ($dom1->getElementsByTagName("a") as $url) {
-                            return $this->prefix . $url->getAttribute("href");
+                        foreach ($dom1->getElementsByTagName("a") as $key => $url) {
+                            if ($key == 1) {
+                                $data = file_get_contents($this->prefix . $url->getAttribute("href"));
+                                $dom3 = new DOMDocument;
+                                @$dom3->loadHTML($data);
+                                $div = $dom3->getElementsByTagName("div");
+                                foreach ($div as $innerDiv) {
+                                    if ($innerDiv->getAttribute("class") == "right clear") {
+                                        $raw = $this->inner_xml($innerDiv);
+                                        preg_match("/unescape\('([\%A-Za-z0-9]*)'\)/", $raw, $match);
+                                        $raw = rawurldecode($match[1]);
+                                        $raw = $this->meta . $raw;
+                                        $dom4 = new DOMDocument;
+                                        @$dom4->loadHTML($raw);
+                                        if (method_exists($dom4, "getElementsByTagName")) {
+                                            $href = $dom4->getElementsByTagName("a");
+                                            $torrent = $href->item(1)->getAttribute("href");
+                                            $torrent = $this->prefix . $torrent;
+                                            return $torrent;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 15 Dec 2014 06:12:31 GMT
+Content-Type: application/zip
+Content-Length: 215343896
+Connection: keep-alive
+Keep-Alive: timeout=60
+Content-Disposition: attachment; filename="[Dymy][Fate stay night  - Unlimited Blade Work][10][BIG5][1280X720].mp4.zip"
+Accept-Ranges: bytes
+Putio-Token: 72d9b3c45ac811e4afbd003048f9257e
+Putio-User-Id-2: 107070
+Last-Modified: Mon, 15 Dec 2014 06:12:28 GMT
+ETag: kQy5H7VCW8obtcIhh5-SBhTSyiXogEPUc_nyDOe8wM5NR1R3LecsbM_6lClmlRuU
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Origin: http://soon.put.io
+Set-Cookie: session2=eyJfaWQiOnsiIGIiOiJNR0ZqTjJVM05tVTROR1JtTURjNFpUTTRNREUxTURCa01ETTJaVFZtT0RBPSJ9fQ.B3ANTw.Tsz1fiAl5DPNjHF3E3iiwr30wFE; Domain=.put.io; HttpOnly; Path=/
+
